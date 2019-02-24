@@ -1,30 +1,47 @@
-const fs = require("fs");
-const v4 = require('uuid');
+const Product = require("../../db/model/product");
+const User = require("../../db/model/user");
+const Order = require("../../db/model/order");
 
 const ordersRouter = express => {
   const ordersRouter = express.Router();
   const jsonParser = express.json();
-  
+
   ordersRouter.post("/", jsonParser, (request, response) => {
-    let order = { ...request.body, id: v4() };
-    const path = "./src/db/products/products-mock.json";
-    fs.readFile(path, (err, data) => {
-      const products = JSON.parse(data);
-      const isCreateOrder = order.products.every(productId =>
-        products.some(product => +product.id === +productId)
-      );
-      if (!isCreateOrder) {
-        response.send('{"status": "failed", "order": null}');
+    let data = request.body;
+    const creatorId = data.creator;
+    const productIds = data.productsList.map(product => product.product);
+
+    Product.find({
+      _id: { $in: [...productIds] }
+    })
+      .then(() => {
+        User.findById(creatorId)
+          .then(user => {
+            Order.create(data, (err, order) => {
+              if (err) response.send("Failed");
+              else {
+                user.orders = [...user.orders, order._id];
+                user.save();
+                response.send({ status: "success", id: order._id });
+              }
+            });
+          })
+          .catch(() => {
+            response.send("User didn't find");
+          });
+      })
+      .catch(err => {
+        console.log(err);
+        response.send(`Product(${err.value}) didn't find`);
+      });
+  });
+  ordersRouter.get("/:id", jsonParser, (request, response) => {
+    const id = request.params["id"];
+    Order.findById(id, (err, order) => {
+      if (err) {
+        response.send({ status: `failed for value ${id}` });
       } else {
-        const pathOrder = `./src/db/orders/${order.id}.json`;
-        fs.writeFile(pathOrder, JSON.stringify(order), err => {
-          response.send(
-            JSON.stringify({
-              status: "success",
-              order
-            })
-          );
-        });
+        response.send(order);
       }
     });
   });

@@ -1,7 +1,4 @@
-const  sendData  = require("./sendData");
-const fs = require("fs");
-const  formatDataResponse  = require("./formatDataResponse");
-
+const Product = require("../../db/model/product");
 
 const productRouter = express => {
   const productRouter = express.Router();
@@ -9,41 +6,51 @@ const productRouter = express => {
 
   productRouter.use("/:id", jsonParser, (request, response) => {
     const id = request.params["id"];
-    
-    sendData(
-      product => product.id === +id,
-      product => product,
-      formatDataResponse(response)
-    );
+    Product.findById(id, (err, product) => {
+      if (err) {
+        response.send({ status: `failed for value ${id}` });
+      } else {
+        response.send(product);
+      }
+    });
   });
+  productRouter.put("/:id", jsonParser, (request, response) => {
+    const id = request.params["id"];
+    const data = request.body;
+    Product.findByIdAndUpdate(id, data, {new: true}, (err, product) => {
+      if(err) response.send({status: "failed"});
+      else {
+        product.updatedAt = Date.now();
+        product.save(err => {
+          response.send({status: "success", product })
+        });
+        
+      }
+    })
+  });
+
   productRouter.use("/", jsonParser, function(request, response) {
+    let conditions = {},
+      projection = {};
     if (request.query.ids) {
       const ids = request.query.ids.split(",");
-      sendData(
-        product => ids.some(id => +id === product.id),
-        product => ({
-          id: product.id,
-          sku: product.sku,
-          name: product.name,
-          description: product.description
-        }), formatDataResponse(response)
-      );
-      return;
+      conditions = {
+        _id: { $in: [...ids] }
+      };
+      projection = { sku: true, name: true, description: true };
     } else if (request.query.category) {
       const categories = request.query.category.split(",");
-      sendData(
-        product => product.categories.some(c => categories.some(cat => cat === c)),
-        product => ({
-          id: product.id,
-          sku: product.sku,
-          name: product.name,
-          description: product.description
-        }), formatDataResponse(response)
-      );
-      return;
+      conditions = {
+        categories: { $in: [...categories] }
+      };
+      projection = { sku: true, name: true, description: true };
     }
-    response.writeHead(200, { "Content-Type": "application/json" });
-    fs.createReadStream("src/db/products/products-mock.json").pipe(response);
+    Product.find(conditions, projection).exec((err, products) => {
+      if (err) {
+        response.send({ status: "no products" });
+      }
+      response.send(products);
+    });
   });
   return productRouter;
 };

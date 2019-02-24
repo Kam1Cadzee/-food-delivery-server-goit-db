@@ -1,4 +1,3 @@
-
 const startSever = require("./src/server");
 
 startSever(3000);

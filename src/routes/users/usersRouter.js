@@ -1,40 +1,46 @@
-const fs = require("fs");
-const v4 = require("uuid");
+
+const User = require("./../../db/model/user");
 
 const usersRouter = express => {
   const usersRouter = express.Router();
   const jsonParser = express.json();
 
   usersRouter.post("/", jsonParser, function(request, response) {
-    let user = { ...request.body, id: v4() };
-    const path = "./src/db/users/all-users.json";
-    fs.readFile(path, "utf-8", (err, data) => {
-      let users = data.length === 0 ? [] : JSON.parse(data);
-      users.push(user);
-      fs.writeFile(path, JSON.stringify(users), err => {
-        let resp = { status: "success", user: user };
-        response.json(JSON.stringify(resp));
-      });
+    let data = request.body;
+    const user = new User(data);
+    user.save(err => {
+      if (err) throw err;
+      response.send({ status: "success", user: { ...data, _id: user._id } });
     });
   });
   usersRouter.get("/:id", jsonParser, (request, response) => {
     const id = request.params["id"];
-    const path = "./src/db/users/all-users.json";
-    fs.readFile(path, "utf-8", (err, data) => {
-      let users = data.length === 0 ? [] : JSON.parse(data);
-      const user = users.find(u => u.id === id);
-      if (user) {
-        response.send(JSON.stringify(user));
-      } else {
-        response.send('{"status": "not found"}');
-      }
+
+    User.findById(id, (err, user) => {
+      if (err) throw err;
+      console.log(user);
+      response.send(user);
     });
   });
+  usersRouter.put("/:id", jsonParser, (request, response) => {
+    const id = request.params["id"];
+    const data = request.body;
+    User.findByIdAndUpdate(id, data, {new: true}, (err, user) => {
+      if(err) response.send({status: "failed"});
+      else {
+        user.updatedAt = Date.now();
+        user.save(err => {
+          response.send({status: "success", user })
+        });
+        
+      }
+    })
+  });
   usersRouter.get("/", jsonParser, (request, response) => {
-    const path = "./src/db/users/all-users.json";
-    fs.readFile(path, "utf-8", (err, data) => {
-          response.send(data);
-    });
+    User.find({}).exec((err, users) => {
+      if (err) throw err;
+      response.send(users);
+    })
   });
   return usersRouter;
 };
